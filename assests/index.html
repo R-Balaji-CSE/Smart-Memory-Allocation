@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMAS v2.0 — Smart Memory Allocation Simulator</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="status-dot"></div>
+    <div>
+      <div class="header-title">SMAS v2.0 — Smart Memory Allocation Simulator</div>
+      <div class="header-subtitle">Paging · Segmentation · DP Knapsack Optimizer · LRU / FIFO / OPT / CLOCK</div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('sim')">Simulation</button>
+      <button class="tab" onclick="switchTab('dp')">DP Optimizer</button>
+      <button class="tab" onclick="switchTab('compare')">Analysis</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <div>
+        <div class="section-label">Memory Config</div>
+        <div class="ctrl-group">
+          <div class="ctrl-row"><span class="ctrl-label">Total RAM (pages)</span><span class="ctrl-val" id="v-total-pages">64</span></div>
+          <input type="range" min="32" max="128" value="64" step="8" oninput="updateParam('totalPages', +this.value, 'v-total-pages')">
+          <div class="ctrl-row"><span class="ctrl-label">Page size (KB)</span><span class="ctrl-val" id="v-page-size">4</span></div>
+          <input type="range" min="1" max="16" value="4" step="1" oninput="updateParam('pageSize', +this.value, 'v-page-size')">
+          <div class="ctrl-row"><span class="ctrl-label">OS reserved</span><span class="ctrl-val" id="v-os-pages">8</span></div>
+          <input type="range" min="4" max="24" value="8" step="2" oninput="updateParam('osPages', +this.value, 'v-os-pages')">
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Replacement Policy</div>
+        <select id="sel-algo" onchange="updateAlgo()">
+          <option value="lru">LRU — Least Recently Used</option>
+          <option value="fifo">FIFO — First In First Out</option>
+          <option value="opt">OPT — Optimal (offline)</option>
+          <option value="clock">CLOCK — Second Chance</option>
+          <option value="dp">DP-KNAP — Priority Knapsack</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="section-label">Workload Pattern</div>
+        <select id="sel-workload" onchange="updateWorkload()">
+          <option value="uniform">Uniform random</option>
+          <option value="zipf">Zipf (80/20 locality)</option>
+          <option value="sequential">Sequential scan</option>
+          <option value="thrash">Thrashing pattern</option>
+          <option value="mixed">Mixed workload</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="section-label">Spawn Process</div>
+        <div class="ctrl-group">
+          <div class="ctrl-row"><span class="ctrl-label">Pages needed</span><span class="ctrl-val" id="v-proc-pages">8</span></div>
+          <input type="range" min="2" max="20" value="8" step="1" oninput="updateParam('procPages', +this.value, 'v-proc-pages')">
+          <div class="ctrl-row"><span class="ctrl-label">Priority (1–10)</span><span class="ctrl-val" id="v-proc-prio">5</span></div>
+          <input type="range" min="1" max="10" value="5" step="1" oninput="updateParam('procPrio', +this.value, 'v-proc-prio')">
+          <div class="ctrl-row"><span class="ctrl-label">Burst time (ms)</span><span class="ctrl-val" id="v-burst">50</span></div>
+          <input type="range" min="10" max="200" value="50" step="10" oninput="updateParam('burst', +this.value, 'v-burst')">
+        </div>
+        <button class="btn" onclick="spawnProcess()" style="margin-top:8px">+ Spawn Process</button>
+      </div>
+
+      <div>
+        <div class="section-label">Simulation Controls</div>
+        <div style="display:flex;gap:6px;flex-direction:column">
+          <button class="btn" onclick="runStep()">▶ Step</button>
+          <button class="btn btn-ghost" onclick="toggleAuto()">⟳ <span id="auto-label">Auto Run</span></button>
+          <button class="btn btn-ghost" onclick="resetSim()">↺ Reset</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Active Processes</div>
+        <div class="proc-list" id="proc-list"></div>
+      </div>
+
+    </div>
+
+    <!-- PANEL -->
+    <div class="panel">
+
+      <!-- METRICS -->
+      <div class="metrics">
+        <div class="metric-card">
+          <div class="metric-label">PAGE HIT RATE</div>
+          <div class="metric-val m-green" id="m-hit-rate">—</div>
+          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-hit" style="background:var(--green);width:0%"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">PAGE FAULTS</div>
+          <div class="metric-val m-red" id="m-faults">0</div>
+          <div class="metric-sub" id="m-fault-rate">rate: —</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">MEM UTILIZATION</div>
+          <div class="metric-val m-amber" id="m-util">—</div>
+          <div class="stat-bar-wrap"><div class="stat-bar" id="bar-util" style="background:var(--amber);width:0%"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">FRAGMENTATION</div>
+          <div class="metric-val m-purple" id="m-frag">—</div>
+          <div class="metric-sub" id="m-frag-type">internal + external</div>
+        </div>
+      </div>
+
+      <!-- TAB PANELS -->
+
+      <!-- SIM TAB -->
+      <div id="tab-sim" class="tab-panel active">
+
+        <div class="mem-section">
+          <div class="mem-header">
+            <div class="mem-title">⬛ Physical Memory Map</div>
+            <span class="mem-addr" id="mem-addr-label">0x0000 — 0xFFFF</span>
+          </div>
+          <div class="page-grid" id="page-grid"></div>
+          <div class="legend" id="legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#2563eb"></span>OS</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>P0</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>P1</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span>P2</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>P3</span>
+            <span class="legend-item"><span class="legend-dot" style="background:var(--surface);border:1px dashed var(--border2)"></span>Free</span>
+          </div>
+        </div>
+
+        <div class="mem-section">
+          <div class="mem-header">
+            <div class="mem-title">▦ Segmentation View</div>
+            <div class="mem-addr" id="seg-stats">—</div>
+          </div>
+          <div id="seg-tracks"></div>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <div class="section-label">Access Pattern (last 32)</div>
+            <div class="ref-string-box" id="ref-string">—</div>
+          </div>
+          <div>
+            <div class="section-label">Event Log</div>
+            <div class="log" id="event-log">
+              <span class="log-entry">System initialized. Spawn a process to begin.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="section-label">Hit Rate Timeline</div>
+          <div class="chart-wrap">
+            <canvas id="hit-chart" role="img" aria-label="Hit rate over time"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- DP TAB -->
+      <div id="tab-dp" class="tab-panel">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="dp-section">
+              <div class="dp-title">DP Knapsack — Memory Allocation</div>
+              <p class="dp-desc">
+                Available memory is the <span class="hi-blue">knapsack capacity</span>.
+                Each process is an item: <span class="hi-green">weight = pages needed</span>,
+                <span class="hi-amber">value = priority × burst_efficiency</span>.
+                The DP table finds the optimal subset to maximise system throughput.
+              </p>
+              <div id="dp-items"></div>
+              <button class="btn" onclick="runDPOptimizer()" style="margin-top:10px">▶ Run DP Optimizer</button>
+            </div>
+            <div class="dp-section">
+              <div class="dp-title" style="color:var(--green)">Optimal Allocation Result</div>
+              <div id="dp-result" style="font-size:11px;color:var(--text3);font-family:var(--mono)">Run the optimizer to see results.</div>
+            </div>
+          </div>
+          <div class="dp-section" style="overflow:hidden">
+            <div class="dp-title" style="color:var(--purple)">DP Table (capacity × processes)</div>
+            <div class="dp-scroll" id="dp-table-wrap">
+              <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">Run optimizer to generate table...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPARE TAB -->
+      <div id="tab-compare" class="tab-panel">
+        <div class="section-label" style="margin-bottom:8px">Algorithm Comparison</div>
+        <div class="algo-grid" id="algo-grid"></div>
+
+        <div style="margin-top:16px">
+          <div class="section-label" style="margin-bottom:8px">Probabilistic Workload Model</div>
+          <div class="dp-section">
+            <div style="font-size:11px;color:var(--text2);line-height:2;font-family:var(--mono)">
+              <div>Model: <span style="color:var(--accent2)" id="wl-model">—</span></div>
+              <div>λ (arrival rate): <span style="color:var(--green)" id="wl-lambda">—</span> req/cycle</div>
+              <div>Working set size: <span style="color:var(--amber)" id="wl-wss">—</span></div>
+              <div>Locality ratio: <span style="color:var(--purple)" id="wl-locality">—</span></div>
+              <div>Thrash threshold: <span style="color:var(--red)" id="wl-thrash">—</span></div>
+            </div>
+            <div class="chart-wrap" style="height:120px;margin-top:10px">
+              <canvas id="wl-chart" role="img" aria-label="Workload probability distribution"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="section-label" style="margin-bottom:8px">Memory Pressure over Time</div>
+          <div class="chart-wrap" style="height:120px">
+            <canvas id="pressure-chart" role="img" aria-label="Memory pressure over time"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <span id="tt-page"></span>
+  <span id="tt-proc"></span>
+  <span id="tt-state"></span>
+</div>
+
+<script src="src/simulator.js"></script>
+</body>
+</html>
