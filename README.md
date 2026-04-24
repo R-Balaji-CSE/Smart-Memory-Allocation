@@ -127,5 +127,18 @@ The DP table is rendered live in the UI with hot-cell highlighting and traceback
 
 ---
 
-## Authors
+## Project Authors & Contributors
 
+This project was collaboratively developed by students of CSE – 2nd Year, SVCE:
+
+R Balaji
+
+Rinkesh A C
+
+Reshman K S
+
+Pranesh Velavan R
+
+All contributors are from the same class and worked together in designing, developing, and implementing this project as part of their academic curriculum.
+
+We hope this project provides value and serves as a helpful reference for others.
